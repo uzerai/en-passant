@@ -8,6 +8,7 @@ import java.util.stream.Stream;
 
 public class Board {
     private final EnumMap<Square, Piece> boardState;
+    private final Stack<Move> moveHistory = new Stack<>();
 
     public Board() {
         this.boardState = Stream.of(Square.values())
@@ -28,19 +29,20 @@ public class Board {
             ));
     }
 
-    public void clearBoard() {
-        this.boardState.clear();
-    }
-
     public Piece getPiece(Square square) {
         return boardState.get(square);
     }
 
+    public Set<Piece> getPieces() {
+        return boardState.values().stream().filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
     public void putPiece(Piece piece, Square square) {
-        //TODO: Maybe set piece#board to the board here?
         boardState.put(square, piece);
-        if (piece.getPosition() != null && piece.getBoard() == this)
+        if (piece.getPosition() != null && piece.getBoard() == this) {
+            this.moveHistory.push(new Move(piece, square));
             clear(piece.getPosition());
+        }
 
         piece.setBoard(this);
         piece.setPosition(square);
@@ -54,9 +56,10 @@ public class Board {
         boardState.put(square, null);
     }
 
-    public Set<Piece> getPieces() {
-        return boardState.values().stream().filter(Objects::nonNull).collect(Collectors.toSet());
+    public void clearBoard() {
+        this.boardState.clear();
     }
+
 
     public EnumMap<Square, Piece> getBoardState() {
         return this.boardState;
@@ -78,6 +81,13 @@ public class Board {
             }
         }
         return threatenedSquares;
+    }
+
+    public Move getLastMove() {
+        if(moveHistory.empty())
+            return null;
+
+        return moveHistory.peek();
     }
 
     public String toString() {

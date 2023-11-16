@@ -1,5 +1,6 @@
 package game.piece;
 
+import game.Move;
 import game.Square;
 
 import java.util.Arrays;
@@ -39,15 +40,31 @@ public class Pawn extends Piece {
             // Can't double-move if there is a piece there.
             if (board.getPiece(possibleDoubleMove) == null) {
                 validSquares.add(possibleDoubleMove);
-            };
+            }
         }
 
+
+        Move lastMove = board.getLastMove();
         // Add threatened squares only if there are enemy pieces present.
+        // Also do en-passant logic depending on lastMove on the board.
         validSquares.addAll(
             threateningSquares()
                     .stream()
                     .filter(square -> {
                         Piece piece = board.getPiece(square);
+
+                        if (lastMove != null && lastMove.wasPawnDoubleMove()) {
+                            // If the last double pawn move was a move to a square next to the current pawn.
+                            boolean enPassantAttackable = List.of(
+                                Square.fromValue(position.getColumn() + 1, position.getRow()),
+                                Square.fromValue(position.getColumn() - 1 , position.getRow())
+                            ).contains(lastMove.getNewSquare());
+
+                            if(enPassantAttackable && (lastMove.getNewSquare().getColumn() == square.getColumn())) {
+                                piece = lastMove.getPiece();
+                            }
+                        }
+
                         return piece != null && piece.getColor() != color;
                     })
                     .toList()
@@ -55,17 +72,17 @@ public class Pawn extends Piece {
 
         // Make squares which break pinning illegal.
         if (!this.pinnedDirections.isEmpty()) {
-            List<Square> pinnedDirectionSquares = pinnedDirections.stream().map(direction -> {
-                int[] reverseDirection = new int[] { -direction.getDirectionX(), -direction.getDirectionY() };
-                return Square.fromValue(
-                        position.getColumn() + reverseDirection[0],
-                        position.getRow() + reverseDirection[1]
-                );
-            }).toList();
+            List<Square> pinnedDirectionSquares = pinnedDirections.stream().map(direction ->
+                    Square.fromValue(
+                    position.getColumn() + direction.opposite().getDirectionX(),
+                    position.getRow() + direction.opposite().getDirectionY()
+                    )
+            ).toList();
             validSquares.retainAll(pinnedDirectionSquares);
         }
 
-        // TODO: en-passant logic
+        retainCheckBlockMoves(validSquares);
+
         return validSquares;
     }
 

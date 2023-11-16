@@ -3,7 +3,7 @@ package game.piece;
 import game.Board;
 import game.Square;
 import game.movement.Direction;
-import game.movement.ProjectionMapping;
+import game.movement.MovementMapping;
 
 import java.util.*;
 
@@ -126,10 +126,10 @@ public abstract class Piece {
 
         while(nextSquare != null) {
             pieceInSquare = board.getPiece(nextSquare);
+
             if (pieceInSquare != null && pieceInSquare != this) {
                 if(pieceInSquare instanceof King && pieceInSquare.getColor() == this.color)
                     this.pinnedDirections.add(direction);
-
                 return; // if the piece was not null, but not a king, there's no direct line between this and king
             } else {
                 nextSquare = Square.fromValue(
@@ -145,13 +145,22 @@ public abstract class Piece {
     }
 
     protected void clearPinning() {
-        for (Piece pinnedPiece : pinningPieces.keySet())
+        for (Piece pinnedPiece : pinningPieces.keySet()) {
             pinnedPiece.removePinnedDirection(pinningPieces.get(pinnedPiece));
+
+            // King uses pinningPieces as a reverse lookup to attackers;
+            if(pinnedPiece instanceof King) {
+                pinnedPiece.pinningPieces.remove(this);
+            }
+        }
 
         pinningPieces.clear();
     }
 
     protected void updatePinnings() {
+        if (this instanceof Pawn || this instanceof  King) {
+            return;
+        }
         clearPinning();
 
         int maxMoves = type == Type.KING ? 1 : -1;
@@ -184,11 +193,35 @@ public abstract class Piece {
     protected void retainOnlyPinLegalMoves(EnumSet<Square> validSquares) {
         if (!this.pinnedDirections.isEmpty()) {
             List<Square> pinnedDirectionSquares = pinnedDirections.stream().flatMap(
-                direction -> ProjectionMapping.forPieceInDirection(this, direction.opposite()).stream()
+                direction -> {
+                    List<Square> results = new ArrayList<>(
+                            MovementMapping.forPieceInDirection(this, direction.opposite()));
+                    results.addAll(MovementMapping.forPieceInDirection(this, direction));
+
+                    return results.stream();
+                }
             ).toList();
 
             if (!pinnedDirectionSquares.isEmpty())
                 validSquares.retainAll(pinnedDirectionSquares);
+        }
+    }
+
+    protected void retainCheckBlockMoves(EnumSet<Square> validSquares) {
+        Optional<Piece> colorKing = board.getPieces().stream().filter(
+                piece -> piece.getColor() == this.color && piece instanceof King
+        ).findAny();
+
+        if(colorKing.isPresent()) {
+            King king = (King) colorKing.get();
+            List<Square> kingThreatened = king.inCheckFromDirections()
+                    .stream()
+                    .flatMap(direction ->
+                        MovementMapping.forPieceInDirection(king, direction).stream()
+                    )
+                    .toList();
+            if (!kingThreatened.isEmpty())
+                validSquares.retainAll(kingThreatened);
         }
     }
 

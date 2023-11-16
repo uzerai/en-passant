@@ -6,8 +6,7 @@ import game.piece.Piece;
 
 import java.util.EnumSet;
 
-public class ProjectionMapping {
-
+public class MovementMapping {
     public static EnumSet<Square> fromPositionDirection(
             Square position,
             Direction direction,

@@ -2,7 +2,7 @@ package game.piece;
 
 import game.Square;
 import game.movement.Direction;
-import game.movement.ProjectionMapping;
+import game.movement.MovementMapping;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -21,7 +21,7 @@ public class King extends Piece {
     public EnumSet<Square> validMoveSquares() {
         EnumSet<Square> validSquares = EnumSet.noneOf(Square.class);
         for (Direction direction : movementDirections) {
-            validSquares.addAll(ProjectionMapping.forPieceInDirection(this, direction, 1));
+            validSquares.addAll(MovementMapping.forPieceInDirection(this, direction, 1));
         }
 
         EnumSet<Square> enemyThreatenedSquares = board.getThreateningSquares(this.color.opposite());
@@ -69,5 +69,9 @@ public class King extends Piece {
     public EnumSet<Square> threateningSquares() {
         // The king can attack any square which is a valid move.
         return validMoveSquares();
+    }
+
+    public List<Direction> inCheckFromDirections() {
+        return this.pinningPieces.values().stream().toList();
     }
 }

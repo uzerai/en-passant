@@ -2,9 +2,7 @@ package test.game.piece;
 
 import game.Board;
 import game.Square;
-import game.piece.Bishop;
-import game.piece.Pawn;
-import game.piece.Piece;
+import game.piece.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -55,6 +53,17 @@ public class BishopTest implements PieceTest {
 
     @Test
     public void cannotBreakPinTest() {
+        Piece king = new King(bishop.getColor());
+        Piece enemyRook = new Rook(bishop.getColor().opposite());
+        board.putPiece(king, Square.E1);
+        board.putPiece(bishop, Square.E2);
+        board.putPiece(enemyRook, Square.E4);
+        assertTrue(bishop.validMoveSquares().isEmpty());
 
+        Piece enemyQueen = new Queen(bishop.getColor().opposite());
+        board.putPiece(enemyQueen, Square.A5);
+        board.clear(enemyRook.getPosition());
+        board.putPiece(bishop, Square.C3);
+        assertTrue(bishop.validMoveSquares().contains(enemyQueen.getPosition()));
     }
 }

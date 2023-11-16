@@ -7,7 +7,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumSet;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -71,5 +70,20 @@ public class QueenTest implements PieceTest {
         enemyRook.move(Square.E6);
         queen.move(Square.E2);
         assertTrue(queen.validMoveSquares().contains(enemyRook.getPosition()));
+    }
+
+    @Test
+    public void forcedMoveSquareTest() {
+        Piece king = new King(queen.getColor());
+        Piece enemyRook = new Rook(queen.getColor().opposite());
+        board.putPiece(king, Square.E1);
+        board.putPiece(enemyRook, Square.E6);
+        board.putPiece(queen, Square.F3);
+        assertEquals(EnumSet.of(Square.E2, Square.E3, Square.E4), queen.validMoveSquares());
+
+        board.putPiece(queen, Square.E3);
+        Piece enemyBishop = new Bishop(queen.getColor().opposite());
+        board.clear(enemyRook.getPosition());
+        board.putPiece(enemyBishop, Square.A5);
     }
 }

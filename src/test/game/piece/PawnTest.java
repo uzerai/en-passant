@@ -70,8 +70,6 @@ public class PawnTest implements PieceTest {
         board.clear(Square.A3);
         // remains two even without the piece.
         assertEquals(2, pawn.threateningSquares().size());
-
-        //TODO: test for en-passant logic.
     }
 
     @Test
@@ -85,5 +83,15 @@ public class PawnTest implements PieceTest {
         assertEquals(EnumSet.of(Square.C3), pawn.validMoveSquares());
         enemyBishop.move(Square.E5);
         assertTrue(pawn.validMoveSquares().isEmpty());
+    }
+
+    @Test
+    public void enPassantTest() {
+        board.putPiece(pawn, Square.E5);
+        Piece enemyPawn = new Pawn(pawn.getColor().opposite());
+        board.putPiece(enemyPawn, Square.D7);
+        enemyPawn.move(Square.D5);
+        assertTrue(pawn.validMoveSquares().contains(Square.D6));
+        assertFalse(pawn.validMoveSquares().contains(Square.F6));
     }
 }
