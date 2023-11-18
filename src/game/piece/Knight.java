@@ -1,8 +1,6 @@
 package game.piece;
 
-import game.Square;
 import game.movement.Direction;
-import game.movement.MovementMapping;
 
 import java.util.EnumSet;
 
@@ -19,23 +17,5 @@ public class Knight extends Piece{
                 Direction.LEAP_WEST_NORTH,
                 Direction.LEAP_NORTH_WEST
             );
-    }
-
-    @Override
-    public EnumSet<Square> validMoveSquares() {
-        EnumSet<Square> validSquares = EnumSet.noneOf(Square.class);
-        for(Direction direction : movementDirections) {
-            validSquares.addAll(MovementMapping.forPieceInDirection(this, direction, 1));
-        }
-
-        retainOnlyPinLegalMoves(validSquares);
-        retainCheckBlockMoves(validSquares);
-
-        return validSquares;
-    }
-
-    @Override
-    public EnumSet<Square> threateningSquares() {
-        return validMoveSquares();
     }
 }

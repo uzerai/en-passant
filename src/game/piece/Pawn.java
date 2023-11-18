@@ -2,10 +2,10 @@ package game.piece;
 
 import game.Move;
 import game.Square;
+import game.movement.Direction;
 
 import java.util.Arrays;
 import java.util.EnumSet;
-import java.util.List;
 
 public class Pawn extends Piece {
     private static final Square[][] STARTING_POSITIONS = {
@@ -22,12 +22,12 @@ public class Pawn extends Piece {
     }
 
     @Override
-    public EnumSet<Square> validMoveSquares() {
+    public void updateValidMoveSquares() {
         EnumSet<Square> validSquares = EnumSet.noneOf(Square.class);
 
         // Pawns can move forward one square (forward relative to black/white)
         int forwardMovement = this.getColor() == Color.WHITE ? 1 : -1;
-        validSquares.add(Square.fromValue(position.getColumn(), position.getRow() + forwardMovement));
+        validSquares.add(Square.fromValue(square.getColumn(), square.getRow() + forwardMovement));
 
         Square[] startingPositions = switch(color) {
             case WHITE -> STARTING_POSITIONS[0];
@@ -35,8 +35,8 @@ public class Pawn extends Piece {
         };
 
         // Allow double movement when in starting position.
-        if (Arrays.stream(startingPositions).anyMatch((square) -> square == this.position) && !hasMoved()) {
-            Square possibleDoubleMove = Square.fromValue(position.getColumn(), position.getRow() + (2 * forwardMovement));
+        if (Arrays.stream(startingPositions).anyMatch((square) -> square == this.square) && !hasMoved()) {
+            Square possibleDoubleMove = Square.fromValue(square.getColumn(), square.getRow() + (2 * forwardMovement));
             // Can't double-move if there is a piece there.
             if (board.getPiece(possibleDoubleMove) == null) {
                 validSquares.add(possibleDoubleMove);
@@ -45,55 +45,47 @@ public class Pawn extends Piece {
 
 
         Move lastMove = board.getLastMove();
-        // Add threatened squares only if there are enemy pieces present.
         // Also do en-passant logic depending on lastMove on the board.
         validSquares.addAll(
             threateningSquares()
-                    .stream()
-                    .filter(square -> {
-                        Piece piece = board.getPiece(square);
+                .stream()
+                .filter(square -> {
+                    Piece piece = board.getPiece(square);
 
-                        if (lastMove != null && lastMove.wasPawnDoubleMove()) {
-                            // If the last double pawn move was a move to a square next to the current pawn.
-                            boolean enPassantAttackable = List.of(
-                                Square.fromValue(position.getColumn() + 1, position.getRow()),
-                                Square.fromValue(position.getColumn() - 1 , position.getRow())
-                            ).contains(lastMove.getNewSquare());
+                    if (lastMove != null && lastMove.wasPawnDoubleMove()) {
+                        // If the last double pawn move was a move to a square next to the current pawn.
+                        boolean enPassantAttackable = lastMove.getNewSquare()
+                                .equals(this.square.nextInDirection(Direction.EAST))
+                             || lastMove.getNewSquare()
+                                .equals(this.square.nextInDirection(Direction.WEST));
 
-                            if(enPassantAttackable && (lastMove.getNewSquare().getColumn() == square.getColumn())) {
-                                piece = lastMove.getPiece();
-                            }
+                        if (enPassantAttackable && (lastMove.getNewSquare().getColumn() == square.getColumn())) {
+                            piece = lastMove.getPiece();
                         }
+                    }
 
-                        return piece != null && piece.getColor() != color;
-                    })
-                    .toList()
+                    return piece != null && piece.getColor() != color;
+                })
+                .toList()
         );
 
         // Make squares which break pinning illegal.
-        if (!this.pinnedDirections.isEmpty()) {
-            List<Square> pinnedDirectionSquares = pinnedDirections.stream().map(direction ->
-                    Square.fromValue(
-                    position.getColumn() + direction.opposite().getDirectionX(),
-                    position.getRow() + direction.opposite().getDirectionY()
-                    )
-            ).toList();
-            validSquares.retainAll(pinnedDirectionSquares);
-        }
+        retainOnlyPinLegalMoves();
+        retainOnlyCheckBlockMoves();
 
-        retainCheckBlockMoves(validSquares);
-
-        return validSquares;
+        validMoveSquares = validSquares;
     }
 
     @Override
     public EnumSet<Square> threateningSquares() {
-        Square rightAttackSquare = Square.fromValue(position.getColumn() + 1, position.getRow() + 1);
-        Square leftAttackSquare = Square.fromValue(position.getColumn() - 1, position.getRow() + 1);
+        Square rightAttackSquare = Square.fromValue(square.getColumn() + 1, square.getRow() + 1);
+        Square leftAttackSquare = Square.fromValue(square.getColumn() - 1, square.getRow() + 1);
 
         EnumSet<Square> possibleThreatenedSquares = EnumSet.noneOf(Square.class);
-        possibleThreatenedSquares.add(rightAttackSquare);
-        possibleThreatenedSquares.add(leftAttackSquare);
+        if (rightAttackSquare != null)
+            possibleThreatenedSquares.add(rightAttackSquare);
+        if (leftAttackSquare != null)
+            possibleThreatenedSquares.add(leftAttackSquare);
 
         return possibleThreatenedSquares;
     }

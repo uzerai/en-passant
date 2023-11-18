@@ -1,5 +1,7 @@
 package game;
 
+import game.movement.Direction;
+
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -38,5 +40,11 @@ public enum Square {
 
     public static Square fromValue(int column, int row) {
         return squareLookup.get(Map.entry(column, row));
+    }
+
+    public Square nextInDirection(Direction direction) {
+        return Square.fromValue(
+                this.getColumn() + direction.getDirectionX(),
+                this.getRow() + direction.getDirectionY());
     }
 }

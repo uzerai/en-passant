@@ -1,5 +1,6 @@
 package game;
 
+import game.movement.MovementProjector;
 import game.piece.Piece;
 
 import java.util.*;
@@ -10,6 +11,8 @@ public class Board {
     private final EnumMap<Square, Piece> boardState;
     private final Stack<Move> moveHistory = new Stack<>();
 
+    private final MovementProjector projectionEngine;
+
     public Board() {
         this.boardState = Stream.of(Square.values())
             .collect(
@@ -17,16 +20,13 @@ public class Board {
                 (EnumMap<Square, Piece> m, Square square) -> m.put(square, null),
                 EnumMap::putAll
             );
+        this.projectionEngine = new MovementProjector(this);
     }
 
     public void fillStartingPositions() {
-        // sets up all the pieces as expected in a game of normal chess.
-        this.boardState.putAll( Stream.of(Square.values())
-            .collect(
-                ()-> new EnumMap<>(Square.class),
-                (EnumMap<Square, Piece> m, Square square) -> m.put(square, Piece.fromStartingSquare(square, this)),
-                EnumMap::putAll
-            ));
+        for (Square square : Square.values()) {
+            this.putPiece(Piece.fromStartingSquare(square), square);
+        }
     }
 
     public Piece getPiece(Square square) {
@@ -38,36 +38,42 @@ public class Board {
     }
 
     public void putPiece(Piece piece, Square square) {
-        boardState.put(square, piece);
-        if (piece.getPosition() != null && piece.getBoard() == this) {
+        System.err.printf("[Board]#putPiece([%s], %s)%n", piece, square);
+        if (piece == null)
+            return;
+
+        if (piece.getBoard() == this) {
             this.moveHistory.push(new Move(piece, square));
-            clear(piece.getPosition());
+            removePieceFromSquare(piece.getSquare());
         }
 
         piece.setBoard(this);
-        piece.setPosition(square);
+        piece.setSquare(square);
+
+        boardState.put(square, piece);
+        System.err.print(this);
+        updateBoardPieces();
     }
 
-    public void clear(Square square) {
+    public void removePieceFromSquare(Square square) {
         Piece piece = getPiece(square);
         if (piece != null)
-            piece.setPosition(null);
+            piece.setSquare(null);
 
         boardState.put(square, null);
+        updateBoardPieces();
     }
-
-    public void clearBoard() {
-        this.boardState.clear();
-    }
-
 
     public EnumMap<Square, Piece> getBoardState() {
         return this.boardState;
     }
 
+    public MovementProjector getProjectionEngine() {
+        return this.projectionEngine;
+    }
+
     /**
      * <p>Returns the threatening squares <i><strong>of the color provided</strong></i>.</p>
-     *
      * <p> ie: {@code Piece.Color.WHITE} will return all {@code Piece.Color.WHITE} pieces' threatened squares.
      *
      * @param color the {@code Piece.Color} to return threatened squares for.
@@ -88,6 +94,13 @@ public class Board {
             return null;
 
         return moveHistory.peek();
+    }
+
+    private void updateBoardPieces() {
+        System.err.println("[Board]#updateBoardPieces()");
+        for (Piece piece : getPieces()) {
+            piece.updateValidMoveSquares();
+        }
     }
 
     public String toString() {

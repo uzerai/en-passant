@@ -38,6 +38,6 @@ public class BoardTest {
         pawn1.move(Square.A4);
         pawn2.move(Square.B5);
         pawn1.move(Square.B5);
-        assertEquals(pawn1.getPosition(), Square.B5);
+        assertEquals(pawn1.getSquare(), Square.B5);
     }
 }

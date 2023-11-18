@@ -57,7 +57,7 @@ public class RookTest implements PieceTest{
         board.putPiece(enemyRook, Square.F6);
         //still pinned by bishop
         assertTrue(rook.validMoveSquares().isEmpty());
-        board.clear(Square.G3);
+        board.removePieceFromSquare(Square.G3);
         // no longer pinned.
         assertFalse(rook.validMoveSquares().isEmpty());
         rook.move(Square.E2);

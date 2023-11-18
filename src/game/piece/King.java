@@ -2,11 +2,8 @@ package game.piece;
 
 import game.Square;
 import game.movement.Direction;
-import game.movement.MovementMapping;
 
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.List;
+import java.util.*;
 
 public class King extends Piece {
     public King(Color color) {
@@ -18,22 +15,28 @@ public class King extends Piece {
     }
 
     @Override
-    public EnumSet<Square> validMoveSquares() {
-        EnumSet<Square> validSquares = EnumSet.noneOf(Square.class);
-        for (Direction direction : movementDirections) {
-            validSquares.addAll(MovementMapping.forPieceInDirection(this, direction, 1));
-        }
+    public void updateValidMoveSquares() {
+        super.updateValidMoveSquares();
+        retainNonThreatenedSquares();
+        appendCastleMoves();
+    }
 
-        EnumSet<Square> enemyThreatenedSquares = board.getThreateningSquares(this.color.opposite());
+    private void retainNonThreatenedSquares() {
+        System.err.printf("[%s]#retainNonThreatenedSquares()%n", this);
+        EnumSet<Square> enemyThreatenedSquares = board.getThreateningSquares(color.opposite());
+        validMoveSquares.removeAll(enemyThreatenedSquares);
+    }
 
-        // if currently in starting position
+    private void appendCastleMoves() {
         if (!this.hasMoved()) {
-            // Castling rules for both sides.
-            Square[] rookSquares = switch(this.color) {
+            System.err.printf("[%s]#appendCastleMoves()%n", this);
+            // Castling rules for both sides -- this look up is faster than
+            // dynamic generation of board square references;
+            Square[] rookSquares = switch (this.color) {
                 case WHITE -> new Square[]{Square.A1, Square.H1};
                 case BLACK -> new Square[]{Square.A8, Square.H8};
             };
-            Square[][] squaresToBeNonThreatened = switch(this.color) {
+            Square[][] squaresToBeNonThreatened = switch (this.color) {
                 case WHITE -> new Square[][]{
                         {Square.A1, Square.B1, Square.C1, Square.D1, Square.E1},
                         {Square.E1, Square.F1, Square.G1, Square.H1}
@@ -43,7 +46,7 @@ public class King extends Piece {
                         {Square.D8, Square.E8, Square.F8, Square.G8, Square.H8}
                 };
             };
-            Square[] targetSquare = switch(this.color) {
+            Square[] targetSquare = switch (this.color) {
                 case WHITE -> new Square[]{Square.C1, Square.G1};
                 case BLACK -> new Square[]{Square.C8, Square.G8};
             };
@@ -51,27 +54,18 @@ public class King extends Piece {
             for (int i = 0; i < rookSquares.length; i++) {
                 Piece possibleUnmovedRook = board.getPiece(rookSquares[i]);
 
-                if (possibleUnmovedRook != null && !possibleUnmovedRook.hasMoved()){
+                if (possibleUnmovedRook instanceof Rook && !possibleUnmovedRook.hasMoved()) {
                     ArrayList<Square> listNotToBeThreatened = new ArrayList<>(List.of(squaresToBeNonThreatened[i]));
-                    if (!listNotToBeThreatened.removeAll(enemyThreatenedSquares)) {
-                        validSquares.add(targetSquare[i]);
+                    if (!listNotToBeThreatened.removeAll(board.getThreateningSquares(color.opposite()))) {
+                        System.err.printf("[%s]#appendCastleMoves() | ADDING CASTLE MOVE FOR SQUARE%s%n", this, targetSquare[i]);
+                        validMoveSquares.add(targetSquare[i]);
                     }
                 }
             }
         }
-
-        validSquares.removeAll(enemyThreatenedSquares);
-
-        return validSquares;
     }
 
-    @Override
-    public EnumSet<Square> threateningSquares() {
-        // The king can attack any square which is a valid move.
-        return validMoveSquares();
-    }
-
-    public List<Direction> inCheckFromDirections() {
-        return this.pinningPieces.values().stream().toList();
+    public HashMap<Piece, Direction> getAttackingPieces() {
+        return attackingPieces;
     }
 }

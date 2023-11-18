@@ -3,19 +3,23 @@ package game.piece;
 import game.Board;
 import game.Square;
 import game.movement.Direction;
-import game.movement.MovementMapping;
+import game.movement.MovementProjection;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public abstract class Piece {
     protected final Color color;
     protected final Type type;
-    protected Board board;
-    protected Square position;
+    protected Board board = null;
+    protected Square square = null;
     private boolean hasMoved = false;
-    protected EnumSet<Direction> movementDirections;
+    // With default values, Piece cannot move.
+    protected EnumSet<Direction> movementDirections  = EnumSet.noneOf(Direction.class);
     protected EnumSet<Direction> pinnedDirections = EnumSet.noneOf(Direction.class);
-    protected HashMap<Piece, Direction> pinningPieces = new HashMap<>(); //can pin multiple pieces
+    // Pieces which are actively attacking this piece.
+    protected HashMap<Piece, Direction> attackingPieces = new HashMap<>();
+    protected EnumSet<Square> validMoveSquares = EnumSet.noneOf(Square.class);
 
     public enum Type {
         PAWN('P'),
@@ -24,6 +28,7 @@ public abstract class Piece {
         ROOK('R'),
         QUEEN('Q'),
         KING('K');
+
 
         private final char denomination;
 
@@ -47,19 +52,13 @@ public abstract class Piece {
         }
     }
 
-    private Piece(Type type, Color color, Board board, Square position) {
+    protected Piece(Type type, Color color) {
         this.type = type;
         this.color = color;
-        this.board = board;
-        this.position = position;
     }
 
-    protected Piece(Type type, Color color) {
-        this(type, color, null, null);
-    }
-
-    public static Piece fromStartingSquare(Square square, Board board) {
-        Piece piece = switch(square) {
+    public static Piece fromStartingSquare(Square square) {
+        return switch(square) {
             case A1, H1 -> new Rook(Color.WHITE);
             case B1, G1 -> new Knight(Color.WHITE);
             case C1, F1 -> new Bishop(Color.WHITE);
@@ -74,9 +73,6 @@ public abstract class Piece {
             case A7, B7, C7, D7, E7, F7, G7, H7 -> new Pawn(Color.BLACK);
             default -> null;
         };
-        board.putPiece(piece, square);
-
-        return piece;
     }
 
     public Color getColor() {
@@ -91,154 +87,169 @@ public abstract class Piece {
         return hasMoved;
     }
 
-    public Square getPosition() {
-        return this.position;
+    public Square getSquare() {
+        return this.square;
     }
 
-    public void setPosition(Square position) {
-        this.position = position;
-        updatePinnings();
-    }
+    public void setSquare(Square square) {
+        if (square == null) {
+            threateningSquares().stream()
+                    .map(threatenedSquare -> board.getPiece(threatenedSquare))
+                    .filter(Objects::nonNull)
+                    .forEach(piece -> piece.removeAttackedBy(this));
+        }
 
+        this.square = square;
+    }
+    public Board getBoard() { return this.board; }
     public void setBoard(Board board) { this.board = board; }
-
-    public Board getBoard() {
-        return this.board;
+    public EnumSet<Square> validMoveSquares() { return validMoveSquares; }
+    public EnumSet<Square> threateningSquares() {
+        return this.validMoveSquares;
     }
 
     public void move(Square newSquare) {
-        if (validMoveSquares().contains(newSquare)) {
+        System.err.printf("[%s]#move(%s)%n", this, newSquare);
+        if (validMoveSquares.contains(newSquare)) {
             board.putPiece(this, newSquare);
             hasMoved = true;
         } else {
             System.err.printf("Attempted invalid move for piece %s -> %s%n", this, newSquare);
         }
     }
-
-    protected void setPiecePinnedBy(Direction direction, Piece piece) {
-        piece.addPinnedByDirection(direction);
-        pinningPieces.put(piece, direction);
-    }
-
-    protected void addPinnedByDirection(Direction direction) {
-        Square nextSquare = position;
-        Piece pieceInSquare;
-
-        while(nextSquare != null) {
-            pieceInSquare = board.getPiece(nextSquare);
-
-            if (pieceInSquare != null && pieceInSquare != this) {
-                if(pieceInSquare instanceof King && pieceInSquare.getColor() == this.color)
-                    this.pinnedDirections.add(direction);
-                return; // if the piece was not null, but not a king, there's no direct line between this and king
-            } else {
-                nextSquare = Square.fromValue(
-                        nextSquare.getColumn() + direction.getDirectionX(),
-                        nextSquare.getRow() + direction.getDirectionY()
-                );
-            }
+    public void setAttackedBy(Piece piece, Direction direction) {
+        System.err.printf("[%s]#setAttackedBy([%s], %s)%n", this, piece, direction);
+        if (piece.getColor() != color) {
+            this.attackingPieces.put(piece, direction);
+            this.detectPinned(piece, direction);
         }
     }
 
-    protected void removePinnedDirection(Direction direction) {
-        this.pinnedDirections.remove(direction);
+    public void removeAttackedBy(Piece piece) {
+        System.err.printf("[%s]#removeAttackedBy([%s])%n", this, piece);
+        Direction direction = attackingPieces.remove(piece);
+        pinnedDirections.remove(direction);
     }
 
-    protected void clearPinning() {
-        for (Piece pinnedPiece : pinningPieces.keySet()) {
-            pinnedPiece.removePinnedDirection(pinningPieces.get(pinnedPiece));
+    private void detectPinned(Piece piece, Direction direction) {
+        System.err.printf("[%s]#detectPinned([%s], %s)%n", this, piece, direction);
+        if(!piece.isSingleMovePiece()) {
+            MovementProjection squaresBehindInDirectionOfAttack = board.getProjectionEngine()
+                    .fromExclusive(square, direction, false);
 
-            // King uses pinningPieces as a reverse lookup to attackers;
-            if(pinnedPiece instanceof King) {
-                pinnedPiece.pinningPieces.remove(this);
-            }
-        }
-
-        pinningPieces.clear();
-    }
-
-    protected void updatePinnings() {
-        if (this instanceof Pawn || this instanceof  King) {
-            return;
-        }
-        clearPinning();
-
-        int maxMoves = type == Type.KING ? 1 : -1;
-
-        for (Direction direction : movementDirections) {
-            Square nextSquare = position;
-            Piece pieceInSquare;
-            int calculatedSquares = 0;
-
-            while (nextSquare != null && (calculatedSquares < maxMoves || maxMoves == -1)) {
-                pieceInSquare = board.getPiece(nextSquare);
-                if (pieceInSquare != null && pieceInSquare != this) {
-                    if (pieceInSquare.getColor() != this.color) {
-                        setPiecePinnedBy(direction, pieceInSquare);
-                        pieceInSquare.setPiecePinnedBy(direction.opposite(), this);
-                    }
-
-                    nextSquare = null;
-                } else {
-                    nextSquare = Square.fromValue(
-                            nextSquare.getColumn() + direction.getDirectionX(),
-                            nextSquare.getRow() + direction.getDirectionY()
-                    );
-                    calculatedSquares++;
-                }
-            }
-        }
-    }
-
-    protected void retainOnlyPinLegalMoves(EnumSet<Square> validSquares) {
-        if (!this.pinnedDirections.isEmpty()) {
-            List<Square> pinnedDirectionSquares = pinnedDirections.stream().flatMap(
-                direction -> {
-                    List<Square> results = new ArrayList<>(
-                            MovementMapping.forPieceInDirection(this, direction.opposite()));
-                    results.addAll(MovementMapping.forPieceInDirection(this, direction));
-
-                    return results.stream();
-                }
-            ).toList();
-
-            if (!pinnedDirectionSquares.isEmpty())
-                validSquares.retainAll(pinnedDirectionSquares);
-        }
-    }
-
-    protected void retainCheckBlockMoves(EnumSet<Square> validSquares) {
-        Optional<Piece> colorKing = board.getPieces().stream().filter(
-                piece -> piece.getColor() == this.color && piece instanceof King
-        ).findAny();
-
-        if(colorKing.isPresent()) {
-            King king = (King) colorKing.get();
-            List<Square> kingThreatened = king.inCheckFromDirections()
+            boolean containsSameColoredKing = squaresBehindInDirectionOfAttack
+                    .getSeenPieces()
+                    .keySet()
                     .stream()
-                    .flatMap(direction ->
-                        MovementMapping.forPieceInDirection(king, direction).stream()
-                    )
-                    .toList();
-            if (!kingThreatened.isEmpty())
-                validSquares.retainAll(kingThreatened);
+                    .anyMatch(
+                        seenPiece ->
+                            (seenPiece.getType() == Type.KING) && (seenPiece.getColor() == color)
+                    );
+
+            if(containsSameColoredKing) {
+                this.pinnedDirections.add(direction);
+                retainOnlyPinLegalMoves();
+            }
         }
     }
 
-    //TODO: Add rules around if the King is in check, forced moves.
-    public abstract EnumSet<Square> validMoveSquares();
+    public void updateValidMoveSquares() {
+        System.err.printf("[%s]#updateValidMoveSquares()%n", this);
 
-    public abstract EnumSet<Square> threateningSquares();
+        EnumSet<Direction> pinnedDirections = EnumSet.copyOf(this.pinnedDirections);
+        EnumSet<Direction> availableDirections = EnumSet.copyOf(movementDirections);
+
+        if (!pinnedDirections.isEmpty()) {
+            pinnedDirections.addAll(this.pinnedDirections.stream()
+                    .map(Direction::opposite)
+                    .collect(Collectors.toSet()));
+            availableDirections.retainAll(pinnedDirections);
+        }
+
+        MovementProjection projection = new MovementProjection();
+        for(Direction direction : availableDirections) {
+            projection.merge(
+                board.getProjectionEngine().fromWithCollisionExclusiveColor(
+                        square, direction, isSingleMovePiece(), color
+                )
+            );
+        }
+
+        for (Map.Entry<Piece, Direction> entry : projection.getSeenPieces().entrySet()) {
+            if (entry.getKey().getColor() != color)
+                entry.getKey().setAttackedBy(this, entry.getValue());
+        }
+
+        validMoveSquares = projection.getProjection();
+        //TODO: Fix rules around if the King is in check, forced moves.
+//        retainOnlyCheckBlockMoves();
+    }
+
+    protected void retainOnlyPinLegalMoves() {
+        System.err.printf("[%s]#retainOnlyPinLegalMoves()%n", this);
+        if (!this.pinnedDirections.isEmpty() && !(this instanceof King)) {
+            EnumSet<Square> pinnedDirectionSquares = EnumSet.noneOf(Square.class);
+
+            for (Direction direction : pinnedDirections) {
+                pinnedDirectionSquares.addAll(
+                    board.getProjectionEngine()
+                        .fromWithCollisionExclusiveColor(square, direction, isSingleMovePiece(), color)
+                        .getProjection());
+                pinnedDirectionSquares.addAll(
+                    board.getProjectionEngine()
+                        .fromWithCollisionExclusiveColor(square, direction.opposite(), isSingleMovePiece(), color)
+                        .getProjection());
+            }
+
+            validMoveSquares.retainAll(pinnedDirectionSquares);
+        }
+    }
+
+    protected void retainOnlyCheckBlockMoves() {
+        if (this instanceof King)
+            return;
+
+        Optional<Piece> colorKing = board.getPieces()
+                .stream()
+                .filter(
+                    piece -> piece.getColor() == this.color && piece instanceof King
+                ).findAny();
+
+        if (colorKing.isPresent()) {
+            King king = (King) colorKing.get();
+            List<Square> kingThreatened = king.getAttackingPieces().entrySet()
+                .stream()
+                .flatMap(entry ->
+                    board.getProjectionEngine()
+                        .fromWithCollisionExclusive(
+                            king.getSquare(),
+                            entry.getValue().opposite(),
+                            entry.getKey().isSingleMovePiece()
+                        )
+                        .getProjection()
+                        .stream()
+                )
+                .toList();
+
+            if (!kingThreatened.isEmpty()) {
+                validMoveSquares.retainAll(kingThreatened);
+            }
+        }
+    }
 
     public String toTypeString() {
         String representationString = String.valueOf(type.getDenomination());
-        if (color == Color.BLACK) {
-            representationString = representationString.toLowerCase();
-        }
-        return representationString;
+        return color == Color.BLACK ? representationString.toLowerCase() : representationString;
+    }
+
+    public boolean isSingleMovePiece() {
+        return switch(type) {
+            case PAWN, KING, KNIGHT -> true;
+            case BISHOP, ROOK, QUEEN -> false;
+        };
     }
 
     public String toString() {
-        return String.format("%s:%s:%s", color, type, position);
+        return String.format("%s:%s:%s", color, type, square);
     }
 }

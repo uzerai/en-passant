@@ -10,7 +10,7 @@ public class Move {
 
     public Move(Piece piece, Square newSquare) {
         this.piece = piece;
-        this.oldSquare = piece.getPosition();
+        this.oldSquare = piece.getSquare();
         this.newSquare = newSquare;
     }
 

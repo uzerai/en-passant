@@ -67,7 +67,7 @@ public class PawnTest implements PieceTest {
         assertTrue(pawn.validMoveSquares().contains(Square.A3));
         assertTrue(pawn.validMoveSquares().containsAll(pawn.threateningSquares()));
         assertEquals(2, pawn.threateningSquares().size());
-        board.clear(Square.A3);
+        board.removePieceFromSquare(Square.A3);
         // remains two even without the piece.
         assertEquals(2, pawn.threateningSquares().size());
     }
